@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AudioSplit — Detector de Repeticiones</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --accent: #e8ff47;
+    --accent2: #47ffe8;
+    --text: #e8e8f0;
+    --muted: #555570;
+    --danger: #ff4747;
+    --success: #47ff8a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BG */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(232,255,71,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,255,71,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  /* HEADER */
+  header {
+    margin-bottom: 48px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .logo-text {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .logo-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 400;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 56px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: var(--surface);
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(232,255,71,0.04) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .drop-zone:hover, .drop-zone.dragging {
+    border-color: var(--accent);
+    background: #14141e;
+  }
+
+  .drop-zone:hover::before, .drop-zone.dragging::before {
+    opacity: 1;
+  }
+
+  .drop-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .drop-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .drop-sub {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  #fileInput { display: none; }
+
+  /* SETTINGS PANEL */
+  .settings {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+  }
+
+  .setting-group label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 8px;
+  }
+
+  .setting-group input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .setting-group .val {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* WAVEFORM */
+  .waveform-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 28px;
+    display: none;
+  }
+
+  .waveform-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 12px;
+  }
+
+  #waveformCanvas {
+    width: 100%;
+    height: 100px;
+    border-radius: 6px;
+    display: block;
+  }
+
+  /* ANALYZE BUTTON */
+  .btn-analyze {
+    width: 100%;
+    padding: 18px;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    display: none;
+  }
+
+  .btn-analyze:hover { background: #f5ff7a; transform: translateY(-1px); }
+  .btn-analyze:active { transform: translateY(0); }
+  .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* PROGRESS */
+  .progress-wrap {
+    display: none;
+    margin-bottom: 28px;
+  }
+
+  .progress-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .progress-bar-bg {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s ease;
+    border-radius: 2px;
+  }
+
+  /* STATUS LOG */
+  .log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    max-height: 140px;
+    overflow-y: auto;
+    margin-bottom: 28px;
+    display: none;
+    line-height: 1.8;
+  }
+
+  .log .ok { color: var(--success); }
+  .log .warn { color: var(--accent); }
+  .log .err { color: var(--danger); }
+
+  /* RESULTS */
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .results-title {
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .results-count {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  .btn-download-all {
+    padding: 10px 20px;
+    background: transparent;
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+    border-radius: 6px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-download-all:hover { background: rgba(71,255,232,0.1); }
+
+  .segments-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .segment-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 16px;
+    transition: border-color 0.2s;
+    animation: slideIn 0.3s ease both;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .segment-card:hover { border-color: var(--accent); }
+
+  .seg-num {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(232,255,71,0.08);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    min-width: 56px;
+    text-align: center;
+  }
+
+  .seg-info { min-width: 0; }
+
+  .seg-name {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .seg-time {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .btn-play {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-play:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-play.playing { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  .btn-dl {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--accent2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .btn-dl:hover { border-color: var(--accent2); background: rgba(71,255,232,0.08); }
+
+  /* EMPTY STATE */
+  #results { display: none; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  @media (max-width: 600px) {
+    .settings { grid-template-columns: 1fr; }
+    .segment-card { grid-template-columns: auto 1fr auto; }
+    .btn-dl { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <span class="logo-text">AudioSplit</span>
+      <span class="logo-tag">v1.0</span>
+    </div>
+    <p class="subtitle">Carga tu audio, detecta automáticamente los segmentos repetidos y descarga cada uno por separado.</p>
+  </header>
+
+  <!-- DROP ZONE -->
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">🎵</span>
+    <div class="drop-title">Arrastra tu archivo de audio aquí</div>
+    <div class="drop-sub">o haz clic para seleccionar · MP3, WAV, OGG, M4A, FLAC</div>
+    <input type="file" id="fileInput" accept="audio/*">
+  </div>
+
+  <!-- WAVEFORM -->
+  <div class="waveform-wrap" id="waveformWrap">
+    <div class="waveform-label">Forma de onda</div>
+    <canvas id="waveformCanvas"></canvas>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="settings">
+    <div class="setting-group">
+      <label>Similitud mínima (%)</label>
+      <input type="range" id="thresholdSlider" min="50" max="99" value="80">
+      <span class="val" id="thresholdVal">80%</span>
+    </div>
+    <div class="setting-group">
+      <label>Silencio entre partes (s)</label>
+      <input type="range" id="gapSlider" min="0" max="5" step="0.1" value="0.5">
+      <span class="val" id="gapVal">0.5 s</span>
+    </div>
+    <div class="setting-group">
+      <label>Duración mínima (s)</label>
+      <input type="range" id="minDurSlider" min="1" max="30" step="0.5" value="3">
+      <span class="val" id="minDurVal">3 s</span>
+    </div>
+  </div>
+
+  <!-- ANALYZE BUTTON -->
+  <button class="btn-analyze" id="analyzeBtn">⚡ Analizar y Separar</button>
+
+  <!-- PROGRESS -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label">
+      <span id="progressText">Procesando...</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+  </div>
+
+  <!-- LOG -->
+  <div class="log" id="logEl"></div>
+
+  <!-- RESULTS -->
+  <div id="results">
+    <div class="results-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="results-title">Segmentos detectados</span>
+        <span class="results-count" id="resultsCount">0</span>
+      </div>
+      <button class="btn-download-all" id="dlAllBtn">↓ Descargar todos</button>
+    </div>
+    <div class="segments-grid" id="segmentsGrid"></div>
+  </div>
+
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let audioCtx = null;
+let audioBuffer = null;
+let segments = [];
+let playingSource = null;
+let playingCard = null;
+let fileName = 'audio';
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function fmt(secs) {
+  const m = Math.floor(secs / 60);
+  const s = (secs % 60).toFixed(2).padStart(5, '0');
+  return `${m}:${s}`;
+}
+
+function log(msg, type = '') {
+  const el = document.getElementById('logEl');
+  el.style.display = 'block';
+  const line = document.createElement('div');
+  if (type) line.className = type;
+  line.textContent = `› ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setProgress(pct, text) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = Math.round(pct) + '%';
+  if (text) document.getElementById('progressText').textContent = text;
+}
+
+// ─── FILE LOAD ────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragging');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+async function loadFile(file) {
+  fileName = file.name.replace(/\.[^.]+$/, '');
+  log(`Cargando: ${file.name} (${(file.size / 1e6).toFixed(2)} MB)`);
+  document.getElementById('logEl').style.display = 'block';
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const arrayBuf = await file.arrayBuffer();
+
+  try {
+    audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+  } catch(e) {
+    log('Error al decodificar el audio: ' + e.message, 'err');
+    return;
+  }
+
+  log(`Duración total: ${fmt(audioBuffer.duration)} · ${audioBuffer.sampleRate} Hz · ${audioBuffer.numberOfChannels} canal(es)`, 'ok');
+  drawWaveform(audioBuffer);
+  document.getElementById('waveformWrap').style.display = 'block';
+  document.getElementById('analyzeBtn').style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('segmentsGrid').innerHTML = '';
+  segments = [];
+}
+
+// ─── WAVEFORM ─────────────────────────────────────────────────────────────────
+function drawWaveform(buf, marks = []) {
+  const canvas = document.getElementById('waveformCanvas');
+  canvas.width = canvas.offsetWidth * devicePixelRatio;
+  canvas.height = 100 * devicePixelRatio;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const W = canvas.offsetWidth, H = 100;
+
+  const data = buf.getChannelData(0);
+  const step = Math.floor(data.length / W);
+
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#333350';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x++) {
+    let max = 0;
+    for (let i = 0; i < step; i++) {
+      const v = Math.abs(data[x * step + i] || 0);
+      if (v > max) max = v;
+    }
+    const h = max * H * 0.9;
+    ctx.moveTo(x, H / 2 - h);
+    ctx.lineTo(x, H / 2 + h);
+  }
+  ctx.stroke();
+
+  // draw segment marks
+  const colors = ['#e8ff47', '#47ffe8', '#ff47e8', '#ff8847', '#47ff8a'];
+  marks.forEach((seg, i) => {
+    const c = colors[i % colors.length];
+    const x1 = (seg.start / buf.duration) * W;
+    const x2 = (seg.end / buf.duration) * W;
+    ctx.fillStyle = c + '22';
+    ctx.fillRect(x1, 0, x2 - x1, H);
+    ctx.fillStyle = c;
+    ctx.fillRect(x1, 0, 2, H);
+    ctx.fillRect(x2 - 2, 0, 2, H);
+    ctx.font = 'bold 10px Space Mono, monospace';
+    ctx.fillStyle = c;
+    ctx.fillText(`A${i + 1}`, x1 + 4, 14);
+  });
+}
+
+// ─── SLIDERS ─────────────────────────────────────────────────────────────────
+document.getElementById('thresholdSlider').addEventListener('input', function() {
+  document.getElementById('thresholdVal').textContent = this.value + '%';
+});
+document.getElementById('gapSlider').addEventListener('input', function() {
+  document.getElementById('gapVal').textContent = parseFloat(this.value).toFixed(1) + ' s';
+});
+document.getElementById('minDurSlider').addEventListener('input', function() {
+  document.getElementById('minDurVal').textContent = parseFloat(this.value).toFixed(1) + ' s';
+});
+
+// ─── ANALYSIS ────────────────────────────────────────────────────────────────
+document.getElementById('analyzeBtn').addEventListener('click', analyze);
+
+async function analyze() {
+  if (!audioBuffer) return;
+
+  const threshold = parseInt(document.getElementById('thresholdSlider').value) / 100;
+  const minGap    = parseFloat(document.getElementById('gapSlider').value);
+  const minDur    = parseFloat(document.getElementById('minDurSlider').value);
+
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('logEl').innerHTML = '';
+  document.getElementById('logEl').style.display = 'block';
+  segments = [];
+
+  log('Iniciando análisis de repeticiones...');
+  setProgress(5, 'Extrayendo señal...');
+  await tick();
+
+  // ── 1. Downsample to mono ──────────────────────────────────────
+  const SR = audioBuffer.sampleRate;
+  const raw = audioBuffer.getChannelData(0);
+
+  // ── 2. Build energy envelope (RMS per frame) ───────────────────
+  const FRAME = Math.floor(SR * 0.05); // 50ms frames
+  const frames = Math.floor(raw.length / FRAME);
+  const energy = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) {
+    let sum = 0;
+    for (let j = 0; j < FRAME; j++) {
+      const v = raw[i * FRAME + j] || 0;
+      sum += v * v;
+    }
+    energy[i] = Math.sqrt(sum / FRAME);
+  }
+
+  setProgress(15, 'Detectando silencios...');
+  await tick();
+
+  // ── 3. Find silence boundaries ────────────────────────────────
+  const silThresh = percentile(energy, 15) * 2.5;
+  log(`Umbral de silencio: ${silThresh.toFixed(4)}`);
+
+  // Group non-silent regions
+  const minFrames = Math.floor(minDur / 0.05);
+  const minGapFrames = Math.floor(minGap / 0.05);
+
+  let regions = [];
+  let inRegion = false;
+  let regionStart = 0;
+
+  for (let i = 0; i < frames; i++) {
+    if (!inRegion && energy[i] > silThresh) {
+      inRegion = true;
+      regionStart = i;
+    } else if (inRegion && energy[i] <= silThresh) {
+      // check gap is long enough
+      let gapEnd = i;
+      while (gapEnd < frames && energy[gapEnd] <= silThresh) gapEnd++;
+      const gapLen = gapEnd - i;
+
+      if (gapLen >= minGapFrames) {
+        // real silence – close region
+        if (i - regionStart >= minFrames) {
+          regions.push({ startF: regionStart, endF: i });
+        }
+        inRegion = gapEnd < frames;
+        regionStart = gapEnd;
+        i = gapEnd - 1;
+      }
+    }
+  }
+  if (inRegion && frames - regionStart >= minFrames) {
+    regions.push({ startF: regionStart, endF: frames });
+  }
+
+  log(`Regiones de audio encontradas: ${regions.length}`);
+  setProgress(35, 'Comparando segmentos...');
+  await tick();
+
+  if (regions.length < 2) {
+    log('No hay suficientes segmentos para comparar. Ajusta los parámetros.', 'warn');
+    setProgress(100, 'Listo');
+    document.getElementById('analyzeBtn').disabled = false;
+    return;
+  }
+
+  // ── 4. Compare consecutive regions by cross-correlation ────────
+  // Use downsampled fingerprint for speed
+  const FP_LEN = 200; // fingerprint length
+
+  function fingerprint(startF, endF) {
+    const len = endF - startF;
+    const fp = new Float32Array(FP_LEN);
+    for (let k = 0; k < FP_LEN; k++) {
+      const fi = Math.floor((k / FP_LEN) * len) + startF;
+      fp[k] = energy[fi];
+    }
+    return fp;
+  }
+
+  function cosineSim(a, b) {
+    let dot = 0, na = 0, nb = 0;
+    for (let k = 0; k < a.length; k++) {
+      dot += a[k] * b[k];
+      na += a[k] * a[k];
+      nb += b[k] * b[k];
+    }
+    if (na === 0 || nb === 0) return 0;
+    return dot / (Math.sqrt(na) * Math.sqrt(nb));
+  }
+
+  const fps = regions.map(r => fingerprint(r.startF, r.endF));
+
+  // Find pairs of consecutive similar regions
+  const uniqueSegs = [];
+  let i = 0;
+  while (i < regions.length) {
+    if (i + 1 < regions.length) {
+      const sim = cosineSim(fps[i], fps[i + 1]);
+      log(`Región ${i + 1} vs ${i + 2}: similitud = ${(sim * 100).toFixed(1)}%`);
+
+      if (sim >= threshold) {
+        // They are a repeated pair → take only the first
+        uniqueSegs.push({
+          start: regions[i].startF * 0.05,
+          end:   regions[i].endF   * 0.05,
+          similarity: sim
+        });
+        log(`✓ Par repetido encontrado. Guardando segmento ${uniqueSegs.length}`, 'ok');
+        i += 2; // skip both
+        continue;
+      }
+    }
+    // Not a repeated pair – still add as standalone
+    uniqueSegs.push({
+      start: regions[i].startF * 0.05,
+      end:   regions[i].endF   * 0.05,
+      similarity: null
+    });
+    i++;
+  }
+
+  setProgress(70, 'Generando archivos de audio...');
+  await tick();
+
+  if (uniqueSegs.length === 0) {
+    log('No se detectaron repeticiones. Prueba bajando el umbral de similitud.', 'warn');
+    setProgress(100, 'Sin resultados');
+    document.getElementById('analyzeBtn').disabled = false;
+    return;
+  }
+
+  // ── 5. Export each segment ──────────────────────────────────────
+  segments = [];
+  for (let s = 0; s < uniqueSegs.length; s++) {
+    const seg = uniqueSegs[s];
+    const startSample = Math.floor(seg.start * SR);
+    const endSample   = Math.min(Math.floor(seg.end * SR), audioBuffer.length);
+    const length = endSample - startSample;
+
+    const newBuf = audioCtx.createBuffer(
+      audioBuffer.numberOfChannels, length, SR
+    );
+    for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+      newBuf.getChannelData(ch).set(
+        audioBuffer.getChannelData(ch).subarray(startSample, endSample)
+      );
+    }
+
+    const wavBlob = await bufferToWav(newBuf);
+    const url = URL.createObjectURL(wavBlob);
+
+    segments.push({
+      index: s + 1,
+      start: seg.start,
+      end:   seg.end,
+      duration: seg.end - seg.start,
+      similarity: seg.similarity,
+      url,
+      blob: wavBlob,
+      buffer: newBuf
+    });
+
+    setProgress(70 + (s / uniqueSegs.length) * 25, `Exportando segmento ${s + 1}/${uniqueSegs.length}...`);
+    await tick();
+  }
+
+  setProgress(100, '¡Listo!');
+  log(`${segments.length} segmento(s) generados correctamente.`, 'ok');
+
+  drawWaveform(audioBuffer, segments);
+  renderResults();
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+// ─── RENDER RESULTS ───────────────────────────────────────────────────────────
+function renderResults() {
+  const grid = document.getElementById('segmentsGrid');
+  grid.innerHTML = '';
+  document.getElementById('resultsCount').textContent = segments.length;
+  document.getElementById('results').style.display = 'block';
+
+  segments.forEach((seg, idx) => {
+    const card = document.createElement('div');
+    card.className = 'segment-card';
+    card.style.animationDelay = (idx * 0.06) + 's';
+    card.innerHTML = `
+      <div class="seg-num">A${seg.index}</div>
+      <div class="seg-info">
+        <div class="seg-name">audio${seg.index}.wav${seg.similarity ? ` <span style="color:var(--success);font-size:11px">(${(seg.similarity*100).toFixed(0)}% sim)</span>` : ''}</div>
+        <div class="seg-time">${fmt(seg.start)} → ${fmt(seg.end)} · ${seg.duration.toFixed(2)}s</div>
+      </div>
+      <button class="btn-play" data-idx="${idx}" title="Reproducir">▶</button>
+      <button class="btn-dl"   data-idx="${idx}" title="Descargar">↓</button>
+    `;
+    grid.appendChild(card);
+  });
+
+  grid.querySelectorAll('.btn-play').forEach(btn => {
+    btn.addEventListener('click', () => playSegment(parseInt(btn.dataset.idx), btn));
+  });
+  grid.querySelectorAll('.btn-dl').forEach(btn => {
+    btn.addEventListener('click', () => downloadSegment(parseInt(btn.dataset.idx)));
+  });
+
+  document.getElementById('dlAllBtn').onclick = downloadAll;
+}
+
+// ─── PLAYBACK ─────────────────────────────────────────────────────────────────
+function playSegment(idx, btn) {
+  // stop current
+  if (playingSource) { playingSource.stop(); playingSource = null; }
+  if (playingCard) { playingCard.textContent = '▶'; playingCard.classList.remove('playing'); }
+
+  if (playingCard === btn) { playingCard = null; return; }
+
+  const seg = segments[idx];
+  const src = audioCtx.createBufferSource();
+  src.buffer = seg.buffer;
+  src.connect(audioCtx.destination);
+  src.start();
+  src.onended = () => { btn.textContent = '▶'; btn.classList.remove('playing'); playingSource = null; playingCard = null; };
+
+  playingSource = src;
+  playingCard = btn;
+  btn.textContent = '■';
+  btn.classList.add('playing');
+}
+
+// ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+function downloadSegment(idx) {
+  const seg = segments[idx];
+  const a = document.createElement('a');
+  a.href = seg.url;
+  a.download = `${fileName}_audio${seg.index}.wav`;
+  a.click();
+}
+
+async function downloadAll() {
+  for (let i = 0; i < segments.length; i++) {
+    await new Promise(r => setTimeout(r, 300 * i));
+    downloadSegment(i);
+  }
+}
+
+// ─── WAV ENCODER ──────────────────────────────────────────────────────────────
+async function bufferToWav(buffer) {
+  const numCh = buffer.numberOfChannels;
+  const SR    = buffer.sampleRate;
+  const len   = buffer.length;
+  const bitsPerSample = 16;
+  const blockAlign = numCh * (bitsPerSample / 8);
+  const byteRate = SR * blockAlign;
+  const dataSize = len * blockAlign;
+
+  const ab = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(ab);
+  const write = (s, o) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+
+  write('RIFF', 0); view.setUint32(4, 36 + dataSize, true);
+  write('WAVE', 8); write('fmt ', 12);
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, SR, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  write('data', 36);
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < len; i++) {
+    for (let ch = 0; ch < numCh; ch++) {
+      const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([ab], { type: 'audio/wav' });
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function percentile(arr, p) {
+  const sorted = Float32Array.from(arr).sort();
+  return sorted[Math.floor((p / 100) * sorted.length)];
+}
+
+function tick() { return new Promise(r => setTimeout(r, 0)); }
+</script>
+</body>
+</html>
